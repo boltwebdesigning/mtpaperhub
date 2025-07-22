@@ -3,20 +3,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { 
   BookOpen, 
-  ChevronRight, 
-  Check, 
-  AlertCircle,
-  BookOpenCheck,
-  CalendarCheck,
-  BookmarkPlus,
-  MessageSquare,
   Plus,
   Minus,
-  ChevronLeft,
   ShoppingCart,
   Mail,
+  X,
   HelpCircle,
-  X
+  Check
 } from 'lucide-react';
 import { useCartStore } from '../stores/cartStore';
 import toast from 'react-hot-toast';
@@ -26,7 +19,7 @@ import Confetti from 'react-confetti';
 // Define types
 type Level = 'o-level' | 'a-level' | 'igcse';
 type Paper = 'P1' | 'P2' | 'P3' | 'P4' | 'P5' | 'P6' | 'S1' | 'M1';
-type Binding = 'ring' | 'tape';
+type Binding = 'none' | 'tape' | 'ring';
 
 interface Subject {
   id: string;
@@ -80,22 +73,24 @@ const pricing: Record<Level, Record<string, Record<string, number>>> = {
     'economics': { 'P1': 110, 'P2': 250 }
   },
   'a-level': {
+    'accounting-al': { 'P1': 170, 'P2': 250, 'P3': 580 },
+    'biology-al': { 'P1': 300, 'P2': 445, 'P3': 175, 'P4': 515, 'P5': 195 },
+    'business-al': { 'P1': 265, 'P2': 375, 'P3': 590 },
+    'chemistry-al': { 'P1': 215, 'P2': 270, 'P3': 195, 'P4': 350, 'P5': 155 },
+    'comp-sci-al': { 'P1': 240, 'P2': 330, 'P3': 160, 'P4': 355 },
+    'economics-al': { 'P1': 190, 'P2': 220, 'P3': 180, 'P4': 190 },
+    'eng-lang-al': { 'P1': 225, 'P2': 110, 'P3': 160, 'P4': 110 },
+    'eng-lit-al': { 'P3': 270, 'P4': 270, 'P5': 260, 'P6': 385 },
+    'env-mgmt-al': { 'P1': 320, 'P2': 290 },
+    'further-math-al': { 'P1': 305, 'P2': 335 },
+    'history-al': { 'P1': 260, 'P2': 355, 'P3': 125, 'P4': 305 },
+    'law-al': { 'P1': 140, 'P2': 170, 'P3': 130, 'P4': 125 },
     'math-al': { 'P1': 525, 'P3': 525, 'S1': 365, 'M1': 410 },
     'physics-al': { 'P1': 290, 'P2': 340, 'P3': 175, 'P4': 370, 'P5': 155 },
     'psychology-al': { 'P1': 320, 'P2': 395, 'P3': 400, 'P4': 340 },
     'sociology-al': { 'P1': 205, 'P2': 210, 'P3': 175 },
     'thinking-skills-al': { 'P1': 285, 'P2': 180, 'P3': 125, 'P4': 175 },
-    'urdu-al': { 'P2': 210, 'P3': 210, 'P4': 210 },
-    'comp-sci-al': { 'P2': 330, 'P3': 160, 'P4': 355 },
-    'economics-al': { 'P1': 190, 'P2': 220, 'P3': 180, 'P4': 190 },
-    'eng-lang-al': { 'P1': 225, 'P2': 110, 'P3': 160, 'P4': 110 },
-    'env-mgmt-al': { 'P1': 320, 'P2': 290 },
-    'further-math-al': { 'P2': 335 },
-    'history-al': { 'P1': 260, 'P2': 355, 'P3': 125, 'P4': 305 },
-    'law-al': { 'P1': 140, 'P2': 170, 'P3': 130, 'P4': 125 },
-    'chemistry-al': { 'P1': 190, 'P2': 220, 'P4': 180 },
-    'biology-al': { 'P1': 180, 'P2': 240, 'P4': 190 },
-    'business-al': { 'P1': 290, 'P2': 290 }
+    'urdu-al': { 'P2': 210, 'P3': 210, 'P4': 210 }
   },
   'igcse': {
     'global-persp': { 'P1': 385 },
@@ -147,20 +142,22 @@ const subjects: Record<Level, Subject[]> = {
     { id: 'accounting', name: 'Accounting', code: '7707', papers: ['P1', 'P2'] }
   ],
   'a-level': [
-    { id: 'math-al', name: 'Mathematics', code: '9709', papers: ['P1', 'P3', 'S1', 'M1'] },
-    { id: 'further-math-al', name: 'Further Mathematics', code: '9231', papers: ['P2'] },
-    { id: 'physics-al', name: 'Physics', code: '9702', papers: ['P1', 'P2', 'P3', 'P4', 'P5'] },
-    { id: 'chemistry-al', name: 'Chemistry', code: '9701', papers: ['P1', 'P2', 'P4'] },
-    { id: 'biology-al', name: 'Biology', code: '9700', papers: ['P1', 'P2', 'P4'] },
+    { id: 'accounting-al', name: 'Accounting', code: '9706', papers: ['P1', 'P2', 'P3'] },
+    { id: 'biology-al', name: 'Biology', code: '9700', papers: ['P1', 'P2', 'P3', 'P4', 'P5'] },
+    { id: 'business-al', name: 'Business Studies', code: '9609', papers: ['P1', 'P2', 'P3'] },
+    { id: 'chemistry-al', name: 'Chemistry', code: '9701', papers: ['P1', 'P2', 'P3', 'P4', 'P5'] },
+    { id: 'comp-sci-al', name: 'Computer Science', code: '9618', papers: ['P1', 'P2', 'P3', 'P4'] },
     { id: 'economics-al', name: 'Economics', code: '9708', papers: ['P1', 'P2', 'P3', 'P4'] },
-    { id: 'business-al', name: 'Business', code: '9609', papers: ['P1', 'P2'] },
-    { id: 'sociology-al', name: 'Sociology', code: '9699', papers: ['P1', 'P2', 'P3'] },
-    { id: 'psychology-al', name: 'Psychology', code: '9990', papers: ['P1', 'P2', 'P3', 'P4'] },
-    { id: 'comp-sci-al', name: 'Computer Science', code: '9618', papers: ['P2', 'P3', 'P4'] },
     { id: 'eng-lang-al', name: 'English Language', code: '9093', papers: ['P1', 'P2', 'P3', 'P4'] },
+    { id: 'eng-lit-al', name: 'English Literature', code: '9695', papers: ['P3', 'P4', 'P5', 'P6'] },
     { id: 'env-mgmt-al', name: 'Environmental Management', code: '8291', papers: ['P1', 'P2'] },
+    { id: 'further-math-al', name: 'Further Mathematics', code: '9231', papers: ['P1', 'P2'] },
     { id: 'history-al', name: 'History', code: '9389', papers: ['P1', 'P2', 'P3', 'P4'] },
     { id: 'law-al', name: 'Law', code: '9084', papers: ['P1', 'P2', 'P3', 'P4'] },
+    { id: 'math-al', name: 'Mathematics', code: '9709', papers: ['P1', 'P3', 'S1', 'M1'] },
+    { id: 'physics-al', name: 'Physics', code: '9702', papers: ['P1', 'P2', 'P3', 'P4', 'P5'] },
+    { id: 'psychology-al', name: 'Psychology', code: '9990', papers: ['P1', 'P2', 'P3', 'P4'] },
+    { id: 'sociology-al', name: 'Sociology', code: '9699', papers: ['P1', 'P2', 'P3'] },
     { id: 'thinking-skills-al', name: 'Thinking Skills', code: '9694', papers: ['P1', 'P2', 'P3', 'P4'] },
     { id: 'urdu-al', name: 'Urdu', code: '9676', papers: ['P2', 'P3', 'P4'] }
   ],
@@ -199,10 +196,10 @@ const BuildYourOwnPage: React.FC = () => {
   const [showConfetti, setShowConfetti] = useState(false);
   const [showFloatingTile, setShowFloatingTile] = useState(true);
   const [formState, setFormState] = useState<FormState>({
-    level: 'o-level',
+    level: 'o-level', 
     subjects: [],
     papers: {},
-    binding: 'tape',
+    binding: 'none',
     bindingOption: 'together',
     notes: '',
     customSubject: '',
@@ -241,7 +238,7 @@ const BuildYourOwnPage: React.FC = () => {
     if (isPaperSelected) {
       updatedSubjectPapers = currentPapers.filter(p => p.paper !== paper);
     } else {
-      const defaultYear = new Date().getFullYear();
+      const defaultYear = 2024;
       const newPaper: PaperYearRange = {
         paper,
         yearRange: { start: defaultYear - 5, end: defaultYear },
@@ -262,7 +259,13 @@ const BuildYourOwnPage: React.FC = () => {
 
     const updatedPapers = [...currentPapers];
     const currentYear = updatedPapers[paperIndex].yearRange[field];
-    updatedPapers[paperIndex].yearRange[field] = currentYear + change;
+    const newYear = currentYear + change;
+    
+    // Limit years to 2024
+    if (newYear > 2024) return;
+    if (newYear < 2010) return;
+    
+    updatedPapers[paperIndex].yearRange[field] = newYear;
 
     // Basic validation to prevent end year from being before start year
     if (field === 'start' && updatedPapers[paperIndex].yearRange.start > updatedPapers[paperIndex].yearRange.end) {
@@ -291,6 +294,8 @@ const BuildYourOwnPage: React.FC = () => {
 
     if (formState.binding === 'ring') {
       basePrice += 200;
+    } else if (formState.binding === 'tape') {
+      basePrice += 50;
     }
     return basePrice;
   }, [formState]);
@@ -555,26 +560,19 @@ const BuildYourOwnPage: React.FC = () => {
                 <div>
                   <h3 className="font-semibold text-slate-700 mb-3">Binding Option</h3>
                   <div className="flex gap-3">
+                    <button onClick={() => setFormState({...formState, binding: 'none'})} className={`flex-1 p-3 rounded-lg border-2 text-sm text-left transition ${formState.binding === 'none' ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                      <p className="font-semibold">No Binding</p>
+                      <p className="text-slate-500">Simple loose papers. (Free)</p>
+                    </button>
                     <button onClick={() => setFormState({...formState, binding: 'tape'})} className={`flex-1 p-3 rounded-lg border-2 text-sm text-left transition ${formState.binding === 'tape' ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 hover:border-slate-300'}`}>
                       <p className="font-semibold">Tape Binding</p>
-                      <p className="text-slate-500">Simple and cost-effective. (Free)</p>
+                      <p className="text-slate-500">Simple and cost-effective. (+PKR 50)</p>
                     </button>
                     <button onClick={() => setFormState({...formState, binding: 'ring'})} className={`flex-1 p-3 rounded-lg border-2 text-sm text-left transition ${formState.binding === 'ring' ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 hover:border-slate-300'}`}>
                       <p className="font-semibold">Ring Binding</p>
                       <p className="text-slate-500">Durable and lays flat. (+PKR 200)</p>
                     </button>
                   </div>
-                </div>
-                {/* Notes */}
-                <div>
-                  <h3 className="font-semibold text-slate-700 mb-3">Special Notes (Optional)</h3>
-                  <textarea
-                    className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
-                    rows={2}
-                    placeholder="e.g., 'Please use black & white printing only.'"
-                    value={formState.notes}
-                    onChange={(e) => setFormState({ ...formState, notes: e.target.value })}
-                  />
                 </div>
               </div>
             </div>
