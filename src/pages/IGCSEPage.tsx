@@ -33,6 +33,7 @@ const IGCSEPage: React.FC = () => {
   const [showModal, setShowModal] = React.useState(false);
   const [sortBy, setSortBy] = React.useState<string>('name');
   const [filterBy, setFilterBy] = React.useState<string>('all');
+  const [searchTerm, setSearchTerm] = React.useState<string>('');
 
   const subjects = [
     { id: 'global-persp', name: 'Global Perspectives', code: '0457', startingPrice: 385, papers: ['P1'] },
@@ -70,6 +71,14 @@ const IGCSEPage: React.FC = () => {
   const filteredAndSortedSubjects = React.useMemo(() => {
     let filtered = [...subjects];
     
+    // Filter by search term
+    if (searchTerm) {
+      filtered = filtered.filter(s => 
+        s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        s.code.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+    
     // Filter by subject type
     if (filterBy !== 'all') {
       if (filterBy === 'sciences') {
@@ -96,7 +105,8 @@ const IGCSEPage: React.FC = () => {
     });
     
     return filtered;
-  }, [sortBy, filterBy]);
+  }, [searchTerm, filterBy, sortBy]);
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Floating Custom Requests Tile */}
@@ -178,6 +188,16 @@ const IGCSEPage: React.FC = () => {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Search Subjects</label>
+                <input
+                  type="text"
+                  placeholder="Search by name or code..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                />
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Subject Type</label>
                 <select
                   value={filterBy}
@@ -191,6 +211,8 @@ const IGCSEPage: React.FC = () => {
                   <option value="mathematics">Mathematics</option>
                 </select>
               </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-1 gap-4 mt-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Sort by</label>
                 <select

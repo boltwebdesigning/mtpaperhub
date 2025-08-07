@@ -1,897 +1,736 @@
-import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { useForm } from 'react-hook-form';
-import {
-  ArrowLeft,
-  CreditCard,
-  Shield,
-  CheckCircle,
-  AlertCircle,
-  User,
-  MapPin,
-  Phone,
+import React, { useState, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
+import { 
+  BookOpen, 
+  Plus,
+  Minus,
+  ShoppingCart,
   Mail,
-  Package,
-  DollarSign,
-  Smartphone,
-  Building,
-  ChevronDown
+  X,
+  HelpCircle,
+  Check
 } from 'lucide-react';
 import { useCartStore } from '../stores/cartStore';
-import { useOrderStore } from '../stores/orderStore';
-import { pakistaniCities, paymentMethods, countryCodes } from '../data/cities';
-import { 
-  generateOrderNumber, 
-  calculateDeliveryCharges, 
-  formatPhoneNumber,
-  validatePhoneNumber,
-  sendOrderEmail,
-  validatePromoCode
-} from '../utils/orderUtils';
-import { Order, CustomerInfo, DeliveryAddress, PaymentMethod } from '../types/order';
 import toast from 'react-hot-toast';
 import Confetti from 'react-confetti';
 
-interface CheckoutFormData extends CustomerInfo, DeliveryAddress {
-  paymentType: 'easypaisa' | 'bank';
-  agreeToTerms: boolean;
-  countryCode: string;
-  promoCode: string;
+// --- DATA & TYPES (Keep your existing data and types) ---
+// Define types
+type Level = 'o-level' | 'a-level' | 'igcse';
+type Paper = 'P1' | 'P2' | 'P3' | 'P4' | 'P5' | 'P6' | 'S1' | 'M1';
+type Binding = 'none' | 'tape' | 'ring';
+
+interface Subject {
+  id: string;
+  name: string;
+  code: string;
+  papers: Paper[];
 }
 
-const CheckoutPage: React.FC = () => {
-  const { items, clearCart, totalPrice } = useCartStore();
-  const { addOrder } = useOrderStore();
+interface PaperYearRange {
+  paper: Paper;
+  sessions: ('may-jun' | 'oct-nov')[];
+  yearRange: {
+    start: number;
+    end: number;
+  };
+}
+
+interface FormState {
+  level: Level; // Default to 'o-level' instead of ''
+  subjects: string[];
+  papers: Record<string, PaperYearRange[]>;
+  binding: Binding; // Default to 'tape'
+  bindingOption: 'together' | 'separate';
+  notes: string;
+  customSubject: string;
+}
+
+// Pricing data (Keep your existing pricing object)
+const pricing: Record<Level, Record<string, Record<string, number>>> = {
+  'o-level': {
+    'english': { 'P1': 250, 'P2': 130 },
+    'english-lit': { 'P1': 255, 'P2': 130 },
+    'env-mgmt': { 'P1': 175, 'P2': 170 },
+    'food-nutrition': { 'P1': 290, 'P2': 290 },
+    'pak-studies': { 'P1': 90, 'P2': 250 },
+    'islamiyat': { 'P1': 315, 'P2': 290 },
+    'math-d': { 'P1': 240, 'P2': 275 },
+    'physics': { 'P1': 170, 'P2': 270, 'P4': 145 },
+    'sociology': { 'P1': 145, 'P2': 180 },
+    'global-persp': { 'P1': 90 },
+    'urdu-1': { 'P1': 80, 'P2': 80 },
+    'urdu-2': { 'P1': 175, 'P2': 175 },
+    'travel-tour': { 'P1': 105, 'P2': 120 },
+    'accounting': { 'P1': 120, 'P2': 330 },
+    'add-math': { 'P1': 255, 'P2': 250 },
+    'biology': { 'P1': 180, 'P2': 240, 'P4': 125 },
+    'business': { 'P1': 290, 'P2': 290 },
+    'chemistry': { 'P1': 160, 'P2': 255, 'P4': 190 },
+    'comb-sci': { 'P1': 180, 'P2': 320 },
+    'commerce': { 'P1': 120, 'P2': 305 },
+    'comp-sci': { 'P1': 180, 'P2': 225 },
+    'economics': { 'P1': 110, 'P2': 250 }
+  },
+  'a-level': {
+    'accounting-al': { 'P1': 170, 'P2': 250, 'P3': 580 },
+    'biology-al': { 'P1': 300, 'P2': 445, 'P3': 175, 'P4': 515, 'P5': 195 },
+    'business-al': { 'P1': 265, 'P2': 375, 'P3': 590 },
+    'chemistry-al': { 'P1': 215, 'P2': 270, 'P3': 195, 'P4': 350, 'P5': 155 },
+    'comp-sci-al': { 'P1': 240, 'P2': 330, 'P3': 160, 'P4': 355 },
+    'economics-al': { 'P1': 190, 'P2': 220, 'P3': 180, 'P4': 190 },
+    'eng-lang-al': { 'P1': 225, 'P2': 110, 'P3': 160, 'P4': 110 },
+    'eng-lit-al': { 'P3': 270, 'P4': 270, 'P5': 260, 'P6': 385 },
+    'env-mgmt-al': { 'P1': 320, 'P2': 290 },
+    'further-math-al': { 'P1': 305, 'P2': 335 },
+    'history-al': { 'P1': 260, 'P2': 355, 'P3': 125, 'P4': 305 },
+    'law-al': { 'P1': 140, 'P2': 170, 'P3': 130, 'P4': 125 },
+    'math-al': { 'P1': 525, 'P3': 525, 'S1': 365, 'M1': 410 },
+    'physics-al': { 'P1': 290, 'P2': 340, 'P3': 175, 'P4': 370, 'P5': 155 },
+    'psychology-al': { 'P1': 320, 'P2': 395, 'P3': 400, 'P4': 340 },
+    'sociology-al': { 'P1': 205, 'P2': 210, 'P3': 175 },
+    'thinking-skills-al': { 'P1': 285, 'P2': 180, 'P3': 125, 'P4': 175 },
+    'urdu-al': { 'P2': 210, 'P3': 210, 'P4': 210 }
+  },
+  'igcse': {
+    'global-persp': { 'P1': 385 },
+    'ict': { 'P1': 365 },
+    'islamiyat': { 'P1': 320, 'P2': 300 },
+    'math': { 'P1': 260, 'P4': 435 },
+    'pak-studies': { 'P1': 60, 'P2': 125 },
+    'physics': { 'P2': 270, 'P4': 285, 'P6': 255 },
+    'sociology': { 'P1': 355, 'P2': 480 },
+    'urdu-2': { 'P1': 100, 'P2': 100 },
+    'accounting': { 'P1': 190, 'P2': 380 },
+    'add-math': { 'P1': 365, 'P2': 350 },
+    'biology': { 'P2': 240, 'P4': 445, 'P5': 250 },
+    'business': { 'P1': 435, 'P2': 321 },
+    'chemistry': { 'P1': 260, 'P2': 395, 'P4': 320, 'P6': 210 },
+    'comp-sci': { 'P1': 290, 'P2': 365 },
+    'economics': { 'P1': 160, 'P2': 395 },
+    'eng-lang': { 'P1': 530, 'P2': 315 },
+    'eng-2nd-lang': { 'P2': 330, 'P4': 145 },
+    'env-mgmt': { 'P1': 435, 'P2': 450 },
+    'geography': { 'P1': 200, 'P2': 250 }
+  }
+};
+
+// Subjects data (Keep your existing subjects object)
+const subjects: Record<Level, Subject[]> = {
+  'o-level': [
+    { id: 'urdu-1', name: 'Urdu – First Language', code: '3247', papers: ['P1', 'P2'] },
+    { id: 'urdu-2', name: 'Urdu – Second Language', code: '3248', papers: ['P1', 'P2'] },
+    { id: 'english', name: 'English Language', code: '1123', papers: ['P1', 'P2'] },
+    { id: 'english-lit', name: 'Literature in English', code: '2010', papers: ['P1', 'P2'] },
+    { id: 'biology', name: 'Biology', code: '5090', papers: ['P1', 'P2', 'P4'] },
+    { id: 'chemistry', name: 'Chemistry', code: '5070', papers: ['P1', 'P2', 'P4'] },
+    { id: 'physics', name: 'Physics', code: '5054', papers: ['P1', 'P2', 'P4'] },
+    { id: 'math-d', name: 'Mathematics D', code: '4024', papers: ['P1', 'P2'] },
+    { id: 'add-math', name: 'Additional Mathematics', code: '4037', papers: ['P1', 'P2'] },
+    { id: 'comb-sci', name: 'Combined Science', code: '5129', papers: ['P1', 'P2', 'P3'] },
+    { id: 'pak-studies', name: 'Pakistan Studies', code: '2059', papers: ['P1', 'P2'] },
+    { id: 'islamiyat', name: 'Islamiyat', code: '2058', papers: ['P1', 'P2'] },
+    { id: 'business', name: 'Business Studies', code: '7115', papers: ['P1', 'P2'] },
+    { id: 'economics', name: 'Economics', code: '2281', papers: ['P1', 'P2'] },
+    { id: 'commerce', name: 'Commerce', code: '7100', papers: ['P1', 'P2'] },
+    { id: 'sociology', name: 'Sociology', code: '2251', papers: ['P1', 'P2'] },
+    { id: 'comp-sci', name: 'Computer Science', code: '2210', papers: ['P1', 'P2'] },
+    { id: 'global-persp', name: 'Global Perspectives', code: '2069', papers: ['P1'] },
+    { id: 'env-mgmt', name: 'Environmental Management', code: '5014', papers: ['P1', 'P2'] },
+    { id: 'food-nutrition', name: 'Food & Nutrition', code: '6065', papers: ['P1', 'P2'] },
+    { id: 'travel-tour', name: 'Travel & Tourism', code: '7096', papers: ['P1', 'P2'] },
+    { id: 'accounting', name: 'Accounting', code: '7707', papers: ['P1', 'P2'] }
+  ],
+  'a-level': [
+    { id: 'accounting-al', name: 'Accounting', code: '9706', papers: ['P1', 'P2', 'P3'] },
+    { id: 'biology-al', name: 'Biology', code: '9700', papers: ['P1', 'P2', 'P3', 'P4', 'P5'] },
+    { id: 'business-al', name: 'Business Studies', code: '9609', papers: ['P1', 'P2', 'P3'] },
+    { id: 'chemistry-al', name: 'Chemistry', code: '9701', papers: ['P1', 'P2', 'P3', 'P4', 'P5'] },
+    { id: 'comp-sci-al', name: 'Computer Science', code: '9618', papers: ['P1', 'P2', 'P3', 'P4'] },
+    { id: 'economics-al', name: 'Economics', code: '9708', papers: ['P1', 'P2', 'P3', 'P4'] },
+    { id: 'eng-lang-al', name: 'English Language', code: '9093', papers: ['P1', 'P2', 'P3', 'P4'] },
+    { id: 'eng-lit-al', name: 'English Literature', code: '9695', papers: ['P3', 'P4', 'P5', 'P6'] },
+    { id: 'env-mgmt-al', name: 'Environmental Management', code: '8291', papers: ['P1', 'P2'] },
+    { id: 'further-math-al', name: 'Further Mathematics', code: '9231', papers: ['P1', 'P2'] },
+    { id: 'history-al', name: 'History', code: '9389', papers: ['P1', 'P2', 'P3', 'P4'] },
+    { id: 'law-al', name: 'Law', code: '9084', papers: ['P1', 'P2', 'P3', 'P4'] },
+    { id: 'math-al', name: 'Mathematics', code: '9709', papers: ['P1', 'P3', 'S1', 'M1'] },
+    { id: 'physics-al', name: 'Physics', code: '9702', papers: ['P1', 'P2', 'P3', 'P4', 'P5'] },
+    { id: 'psychology-al', name: 'Psychology', code: '9990', papers: ['P1', 'P2', 'P3', 'P4'] },
+    { id: 'sociology-al', name: 'Sociology', code: '9699', papers: ['P1', 'P2', 'P3'] },
+    { id: 'thinking-skills-al', name: 'Thinking Skills', code: '9694', papers: ['P1', 'P2', 'P3', 'P4'] },
+    { id: 'urdu-al', name: 'Urdu', code: '9676', papers: ['P2', 'P3', 'P4'] }
+  ],
+  'igcse': [
+    { id: 'eng-lang', name: 'English Language (First Language)', code: '0500', papers: ['P1', 'P2'] },
+    { id: 'eng-lit', name: 'English Literature', code: '0475', papers: ['P1', 'P2', 'P3', 'P4'] },
+    { id: 'urdu-2', name: 'Urdu as a Second Language', code: '0539', papers: ['P1', 'P2'] },
+    { id: 'math', name: 'Mathematics (Core and Extended)', code: '0580', papers: ['P1', 'P2', 'P3', 'P4'] },
+    { id: 'add-math', name: 'Additional Mathematics', code: '0606', papers: ['P1', 'P2'] },
+    { id: 'biology', name: 'Biology', code: '0610', papers: ['P1', 'P2', 'P3', 'P4', 'P5', 'P6'] },
+    { id: 'chemistry', name: 'Chemistry', code: '0620', papers: ['P1', 'P2', 'P3', 'P4', 'P5', 'P6'] },
+    { id: 'physics', name: 'Physics', code: '0625', papers: ['P1', 'P2', 'P3', 'P4', 'P5', 'P6'] },
+    { id: 'comb-sci', name: 'Combined Science', code: '0653', papers: ['P1', 'P2', 'P3', 'P4', 'P5', 'P6'] },
+    { id: 'pak-studies', name: 'Pakistan Studies', code: '0448', papers: ['P1', 'P2'] },
+    { id: 'islamiyat', name: 'Islamiyat', code: '0493', papers: ['P1', 'P2'] },
+    { id: 'business', name: 'Business Studies', code: '0450', papers: ['P1', 'P2'] },
+    { id: 'economics', name: 'Economics', code: '0455', papers: ['P1', 'P2'] },
+    { id: 'sociology', name: 'Sociology', code: '0495', papers: ['P1', 'P2'] },
+    { id: 'global-persp', name: 'Global Perspectives', code: '0457', papers: ['P1'] },
+    { id: 'comp-sci', name: 'Computer Science', code: '0478', papers: ['P1', 'P2'] },
+    { id: 'ict', name: 'Information and Communication Technology (ICT)', code: '0417', papers: ['P1', 'P2', 'P3'] },
+    { id: 'geography', name: 'Geography', code: '0460', papers: ['P1', 'P2'] },
+    { id: 'env-mgmt', name: 'Environmental Management', code: '0680', papers: ['P1', 'P2'] },
+    { id: 'accounting', name: 'Accounting', code: '0452', papers: ['P1', 'P2'] },
+    { id: 'eng-2nd-lang', name: 'English as a Second Language', code: '0510', papers: ['P2', 'P4'] }
+  ]
+};
+// Make sure to paste your full pricing and subjects data here from your original code.
+
+
+// --- REDESIGNED COMPONENT ---
+const BuildYourOwnPage: React.FC = () => {
   const navigate = useNavigate();
-  
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [orderComplete, setOrderComplete] = useState(false);
-  const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
+  const { addItem } = useCartStore();
+
   const [showConfetti, setShowConfetti] = useState(false);
-  const [selectedCity, setSelectedCity] = useState('');
-  const [deliveryCharges, setDeliveryCharges] = useState(0);
-  const [selectedCountryCode, setSelectedCountryCode] = useState('+92');
-  const [promoDiscount, setPromoDiscount] = useState(0);
-  const [promoMessage, setPromoMessage] = useState('');
-  const [appliedPromoCode, setAppliedPromoCode] = useState('');
-  
-  const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<CheckoutFormData>({
-    defaultValues: {
-      countryCode: '+92'
-    }
+  const [showFloatingTile, setShowFloatingTile] = useState(true);
+  const [formState, setFormState] = useState<FormState>({
+    level: 'o-level', 
+    subjects: [],
+    papers: {},
+    binding: 'none',
+    bindingOption: 'together',
+    notes: '',
+    customSubject: '',
   });
-  
-  const paymentType = watch('paymentType');
-  const city = watch('city');
-  const phone = watch('phone');
-  const countryCode = watch('countryCode');
-  const promoCode = watch('promoCode');
-  
-  // Calculate totals
-  const subtotal = totalPrice();
-  const total = subtotal + deliveryCharges - promoDiscount;
-  
-  // Update delivery charges when subtotal changes
-  useEffect(() => {
-    const charges = calculateDeliveryCharges(subtotal);
-    setDeliveryCharges(charges);
-  }, [subtotal]);
 
-  // Update city selection
-  useEffect(() => {
-    if (city) {
-      setSelectedCity(city);
-    }
-  }, [city]);
+  // --- LOGIC (Mostly unchanged, adapted for new flow) ---
+  const handleSelectLevel = (level: Level) => {
+    setFormState({
+      ...formState,
+      level,
+      subjects: [],
+      papers: {},
+    });
+  };
 
-  // Update selected country code
-  useEffect(() => {
-    if (countryCode) {
-      setSelectedCountryCode(countryCode);
-    }
-  }, [countryCode]);
+  const handleToggleSubject = (subjectId: string) => {
+    const isSelected = formState.subjects.includes(subjectId);
+    let updatedSubjects = [...formState.subjects];
+    const updatedPapers = { ...formState.papers };
 
-  const handleApplyPromoCode = () => {
-    if (!promoCode) {
-      toast.error('Please enter a promo code');
-      return;
-    }
-
-    const validation = validatePromoCode(promoCode, subtotal);
-    
-    if (validation.valid) {
-      setPromoDiscount(validation.discount);
-      setPromoMessage(validation.message);
-      setAppliedPromoCode(promoCode);
-      toast.success(validation.message);
+    if (isSelected) {
+      updatedSubjects = updatedSubjects.filter(id => id !== subjectId);
+      delete updatedPapers[subjectId];
     } else {
-      setPromoDiscount(0);
-      setPromoMessage(validation.message);
-      setAppliedPromoCode('');
-      toast.error(validation.message);
+      updatedSubjects.push(subjectId);
+      updatedPapers[subjectId] = [];
     }
+    setFormState({ ...formState, subjects: updatedSubjects, papers: updatedPapers });
+  };
+  
+  const handleTogglePaper = (subjectId: string, paper: Paper) => {
+    const currentPapers = formState.papers[subjectId] || [];
+    const isPaperSelected = currentPapers.some(p => p.paper === paper);
+    let updatedSubjectPapers;
+
+    if (isPaperSelected) {
+      updatedSubjectPapers = currentPapers.filter(p => p.paper !== paper);
+    } else {
+      const defaultYear = 2024;
+      const newPaper: PaperYearRange = {
+        paper,
+        sessions: ['may-jun'],
+        yearRange: { start: defaultYear - 5, end: defaultYear },
+      };
+      updatedSubjectPapers = [...currentPapers, newPaper];
+    }
+    
+    setFormState({
+      ...formState,
+      papers: { ...formState.papers, [subjectId]: updatedSubjectPapers },
+    });
   };
 
-  const handleRemovePromoCode = () => {
-    setPromoDiscount(0);
-    setPromoMessage('');
-    setAppliedPromoCode('');
-    setValue('promoCode', '');
-    toast.success('Promo code removed');
+  const handleUpdatePaperYear = (subjectId: string, paper: Paper, field: 'start' | 'end', change: number) => {
+    const currentPapers = formState.papers[subjectId] || [];
+    const paperIndex = currentPapers.findIndex(p => p.paper === paper);
+    if (paperIndex === -1) return;
+
+    const updatedPapers = [...currentPapers];
+    const currentYear = updatedPapers[paperIndex].yearRange[field];
+    const newYear = currentYear + change;
+    
+    // Limit years to 2024
+    if (newYear > 2024) return;
+    if (newYear < 2010) return;
+    
+    updatedPapers[paperIndex].yearRange[field] = newYear;
+
+    // Basic validation to prevent end year from being before start year
+    if (field === 'start' && updatedPapers[paperIndex].yearRange.start > updatedPapers[paperIndex].yearRange.end) {
+        updatedPapers[paperIndex].yearRange.end = updatedPapers[paperIndex].yearRange.start;
+    }
+    if (field === 'end' && updatedPapers[paperIndex].yearRange.end < updatedPapers[paperIndex].yearRange.start) {
+        updatedPapers[paperIndex].yearRange.start = updatedPapers[paperIndex].yearRange.end;
+    }
+
+    setFormState({
+      ...formState,
+      papers: { ...formState.papers, [subjectId]: updatedPapers },
+    });
   };
-  
-  // Redirect if cart is empty
-  if (items.length === 0 && !orderComplete) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-6">
-        <div className="max-w-md w-full text-center">
-          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <AlertCircle className="h-8 w-8 text-gray-400" />
-          </div>
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">Your cart is empty</h2>
-          <p className="text-gray-600 mb-6">
-            Add some items to your cart before proceeding to checkout.
-          </p>
-          <Link
-            to="/build-your-own"
-            className="inline-flex items-center px-6 py-3 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors shadow-md"
-          >
-            <ArrowLeft className="h-5 w-5 mr-2" />
-            <span>Build Your Package</span>
-          </Link>
-        </div>
-      </div>
-    );
-  }
-  
-  const onSubmit = async (data: CheckoutFormData) => {
-    if (!data.agreeToTerms) {
-      toast.error('Please agree to terms and conditions');
+
+  const handleUpdatePaperSession = (subjectId: string, paper: Paper, session: 'may-jun' | 'oct-nov') => {
+    const currentPapers = formState.papers[subjectId] || [];
+    const paperIndex = currentPapers.findIndex(p => p.paper === paper);
+    if (paperIndex === -1) return;
+
+    const updatedPapers = [...currentPapers];
+    const currentSessions = updatedPapers[paperIndex].sessions;
+    
+    if (currentSessions.includes(session)) {
+      // Remove session if already selected (but keep at least one)
+      if (currentSessions.length > 1) {
+        updatedPapers[paperIndex].sessions = currentSessions.filter(s => s !== session);
+      }
+    } else {
+      // Add session if not selected
+      updatedPapers[paperIndex].sessions = [...currentSessions, session];
+    }
+
+    setFormState({
+      ...formState,
+      papers: { ...formState.papers, [subjectId]: updatedPapers },
+    });
+  };
+
+  const calculatePrice = useMemo(() => {
+    let basePrice = 0;
+    let totalPapers = 0;
+    formState.subjects.forEach(subjectId => {
+      const papers = formState.papers[subjectId] || [];
+      papers.forEach(paperInfo => {
+        const yearCount = paperInfo.yearRange.end - paperInfo.yearRange.start + 1;
+        const paperPrice = pricing[formState.level]?.[subjectId]?.[paperInfo.paper] ?? 0;
+        basePrice += paperPrice * (yearCount > 0 ? yearCount : 0);
+        totalPapers += 1;
+      });
+    });
+
+    // Calculate binding charges based on total number of papers
+    if (formState.binding === 'ring') {
+      basePrice += 200 * totalPapers;
+    } else if (formState.binding === 'tape') {
+      basePrice += 50 * totalPapers;
+    }
+    return basePrice;
+  }, [formState]);
+
+  const handleAddToCart = () => {
+    if (formState.subjects.length === 0) {
+      toast.error('Please select at least one subject.');
       return;
     }
-    
-    setIsProcessing(true);
-    
-    try {
-      // Create order object
-      const order: Order = {
-        id: crypto.randomUUID(),
-        orderNumber: generateOrderNumber(),
-        customer: {
-          firstName: data.firstName,
-          lastName: data.lastName,
-          email: data.email,
-          phone: formatPhoneNumber(data.phone, data.countryCode),
-          alternatePhone: data.alternatePhone ? formatPhoneNumber(data.alternatePhone, data.countryCode) : undefined
-        },
-        delivery: {
-          address: data.address,
-          area: data.area || '',
-          city: data.city,
-          postalCode: data.postalCode,
-          landmark: data.landmark,
-          deliveryInstructions: data.deliveryInstructions
-        },
-        payment: {
-          type: data.paymentType,
-          details: {}
-        },
-        items: items.map(item => ({
-          id: item.id,
-          name: item.name,
-          price: item.price,
-          quantity: item.quantity,
-          type: item.type,
-          details: item.details
-        })),
-        subtotal,
-        deliveryCharges,
-        codCharges: 0,
-        total,
-        status: 'pending',
-        paymentStatus: 'pending',
-        createdAt: new Date().toISOString(),
-        estimatedDelivery: '',
-        notes: data.deliveryInstructions,
-        promoCode: appliedPromoCode,
-        promoDiscount
-      };
-      
-      // Simulate processing time
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Send email
-      const emailSent = await sendOrderEmail(order);
-      
-      if (!emailSent) {
-        console.warn('Failed to send order email');
-      }
-      
-      // Add order to store
-      addOrder(order);
-      
-      // Clear cart and show success
-      clearCart();
-      setCompletedOrder(order);
-      setOrderComplete(true);
-      setShowConfetti(true);
-      
-      toast.success('Order placed successfully!');
-      
-      // Hide confetti after 5 seconds
-      setTimeout(() => setShowConfetti(false), 5000);
-      
-    } catch (error) {
-      console.error('Order processing error:', error);
-      toast.error('There was an error processing your order. Please try again.');
-    } finally {
-      setIsProcessing(false);
+    const hasSelectedPapers = formState.subjects.some(sid => formState.papers[sid]?.length > 0);
+    if (!hasSelectedPapers) {
+      toast.error('Please select at least one paper for your chosen subjects.');
+      return;
     }
+
+    const levelLabel = formState.level === 'o-level' ? 'O Level' : formState.level === 'a-level' ? 'A Level' : 'IGCSE';
+    const allSubjects = subjects[formState.level];
+    
+    const customPackage = {
+      id: `custom-${Date.now()}`,
+      type: 'custom' as const,
+      name: `Custom ${levelLabel} Package`,
+      price: calculatePrice,
+      details: {
+        level: levelLabel,
+        subjects: formState.subjects.map(subjectId => {
+          const subject = allSubjects.find(s => s.id === subjectId);
+          return {
+            name: subject?.name,
+            code: subject?.code,
+            papers: formState.papers[subjectId]?.map(p => ({
+              paper: p.paper,
+              yearRange: `${p.yearRange.start}-${p.yearRange.end}`,
+            })) || [],
+          };
+        }),
+        binding: `${formState.binding === 'ring' ? 'Ring' : 'Tape'} Binding (${formState.bindingOption})`,
+        notes: formState.notes,
+        customSubject: formState.customSubject,
+      },
+    };
+
+    addItem(customPackage);
+    toast.success('Custom package added to cart!');
+    setShowConfetti(true);
+    setTimeout(() => setShowConfetti(false), 5000);
   };
-  
-  // Order success page
-  if (orderComplete && completedOrder) {
-    return (
-      <div className="min-h-screen bg-gray-50 py-8 px-6">
-        {showConfetti && <Confetti recycle={false} numberOfPieces={200} />}
-        
-        <div className="max-w-4xl mx-auto">
-          <motion.div 
-            className="bg-white rounded-xl shadow-lg overflow-hidden"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-          >
-            {/* Success Header */}
-            <div className="bg-green-500 text-white p-6 text-center">
-              <CheckCircle className="h-16 w-16 mx-auto mb-4" />
-              <h1 className="text-3xl font-bold mb-2">Order Confirmed!</h1>
-              <p className="text-green-100">Order #{completedOrder.orderNumber}</p>
-            </div>
-            
-            {/* Order Details */}
-            <div className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <h3 className="font-semibold text-gray-800 mb-2 flex items-center">
-                    <MapPin className="h-5 w-5 mr-2 text-indigo-600" />
-                    Delivery Information
-                  </h3>
-                  <p className="text-sm text-gray-600">
-                    {completedOrder.delivery.address}<br />
-                    {completedOrder.delivery.city}
-                  </p>
-                </div>
-                
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <h3 className="font-semibold text-gray-800 mb-2 flex items-center">
-                    <CreditCard className="h-5 w-5 mr-2 text-indigo-600" />
-                    Payment Method
-                  </h3>
-                  <p className="text-sm text-gray-600">
-                    {completedOrder.payment.type.toUpperCase()}
-                  </p>
-                </div>
-              </div>
-              
-              {/* Payment Instructions */}
-              {completedOrder.payment.type === 'easypaisa' && (
-                <div className="bg-blue-50 p-4 rounded-lg mb-6">
-                  <h3 className="font-semibold text-blue-800 mb-2">EasyPaisa Payment Instructions</h3>
-                  <div className="text-sm text-blue-700 space-y-1">
-                    <p><strong>Account Name:</strong> AQSA NOOR MALIK</p>
-                    <p><strong>Account Number:</strong> 03297899451</p>
-                    <p><strong>Amount to Send:</strong> PKR {completedOrder.total}</p>
-                    <p className="text-blue-600 font-medium mt-2">Please send the payment and share the transaction ID with us via WhatsApp at +92 329 7899451</p>
-                  </div>
-                </div>
-              )}
-              
-              {completedOrder.payment.type === 'bank' && (
-                <div className="bg-blue-50 p-4 rounded-lg mb-6">
-                  <h3 className="font-semibold text-blue-800 mb-2">Bank Transfer Instructions</h3>
-                  <div className="text-sm text-blue-700 space-y-1">
-                    <p><strong>Account Title:</strong> ABDULLAH AZEEM MALIK (M) SHAZIA QADIR MALIK (G)</p>
-                    <p><strong>Bank:</strong> Meezan Bank - Askari X Branch</p>
-                    <p><strong>Account Number:</strong> 11460106540188</p>
-                    <p><strong>IBAN:</strong> PK75MEZN0011460106540188</p>
-                    <p><strong>Amount to Transfer:</strong> PKR {completedOrder.total}</p>
-                    <p className="text-blue-600 font-medium mt-2">Please transfer the amount and share the transaction receipt with us via WhatsApp at +92 329 7899451</p>
-                  </div>
-                </div>
-              )}
-              
-              {/* Contact Information */}
-              <div className="bg-blue-50 p-4 rounded-lg mb-6">
-                <h3 className="font-semibold text-blue-800 mb-2">What happens next?</h3>
-                <ul className="text-sm text-blue-700 space-y-1">
-                  <li>• Complete the payment using the details above</li>
-                  <li>• Share the transaction ID/receipt via WhatsApp</li>
-                  <li>• Your order will be prepared and shipped</li>
-                  <li>• You'll receive updates on your order status</li>
-                </ul>
-              </div>
-              
-              {/* Order Summary */}
-              <div className="border-t pt-4">
-                <h3 className="font-semibold text-gray-800 mb-4">Order Summary</h3>
-                <div className="space-y-2">
-                  {completedOrder.items.map((item) => (
-                    <div key={item.id} className="flex justify-between text-sm">
-                      <span>{item.name} × {item.quantity}</span>
-                      <span>PKR {item.price * item.quantity}</span>
-                    </div>
-                  ))}
-                  <div className="flex justify-between text-sm border-t pt-2">
-                    <span>Subtotal</span>
-                    <span>PKR {completedOrder.subtotal}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span>Delivery Charges</span>
-                    <span>PKR {completedOrder.deliveryCharges}</span>
-                  </div>
-                  {completedOrder.promoDiscount && completedOrder.promoDiscount > 0 && (
-                    <div className="flex justify-between text-sm">
-                      <span>Promo Discount ({completedOrder.promoCode})</span>
-                      <span>-PKR {completedOrder.promoDiscount}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between font-bold text-lg border-t pt-2">
-                    <span>Total</span>
-                    <span>PKR {completedOrder.total}</span>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Contact Info */}
-              <div className="bg-gray-50 p-4 rounded-lg mt-6 text-center">
-                <h3 className="font-semibold text-gray-800 mb-2">Need Help?</h3>
-                <div className="text-sm text-gray-600 space-y-1">
-                  <p>📞 +92 329 7899451</p>
-                  <p>📧 web.mtpaperhub@gmail.com</p>
-                  <p>📍 Askari X, Lahore</p>
-                </div>
-              </div>
-              
-              {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row gap-4 justify-center mt-6">
-                <Link
-                  to="/"
-                  className="px-6 py-3 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors shadow-md text-center"
-                >
-                  Continue Shopping
-                </Link>
-                <Link
-                  to="/build-your-own"
-                  className="px-6 py-3 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors text-center"
-                >
-                  Build Another Package
-                </Link>
-              </div>
-            </div>
-          </motion.div>
-        </div>
-      </div>
-    );
-  }
-  
+
+  const getSubjectById = (subjectId: string): Subject | undefined => {
+    return subjects[formState.level].find(s => s.id === subjectId);
+  };
+
+  const levelConfig = {
+    'o-level': { color: 'red', name: 'O Level' },
+    'a-level': { color: 'blue', name: 'A Level' },
+    'igcse': { color: 'green', name: 'IGCSE' },
+  };
+
+  const activeColor = levelConfig[formState.level].color;
+
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-6 md:px-12 lg:px-20">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="text-3xl font-bold text-gray-800">Checkout</h1>
-          <Link to="/cart" className="flex items-center text-indigo-600 hover:text-indigo-700">
-            <ArrowLeft className="h-4 w-4 mr-1" />
-            <span>Back to Cart</span>
-          </Link>
+    <div className="min-h-screen bg-slate-50 font-sans">
+      {showConfetti && <Confetti recycle={false} numberOfPieces={300} />}
+      
+      {/* Floating Custom Requests Tile */}
+      {showFloatingTile && (
+        <motion.div
+          initial={{ opacity: 0, x: 100 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: 100 }}
+          transition={{ duration: 0.3, delay: 2 }}
+          className="fixed bottom-6 right-6 z-50"
+        >
+          <div className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-4 py-3 rounded-full shadow-lg flex items-center space-x-3 hover:shadow-xl transition-shadow">
+            <Mail className="h-4 w-4 text-purple-200" />
+            <span className="text-sm font-medium whitespace-nowrap">Can't find something?</span>
+            <a
+              href="https://mail.google.com/mail/?view=cm&fs=1&to=web.mtpaperhub@gmail.com&su=Custom%20Request&body=Hi%20MTPaperhub,%0D%0A%0D%0AI%20need%20help%20with:%0D%0A%0D%0A[Please%20describe%20what%20you%20need]%0D%0A%0D%0AThank%20you!"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-white text-purple-600 px-3 py-1 rounded-full text-xs font-medium hover:bg-purple-50 transition-colors"
+            >
+              Email
+            </a>
+            <button
+              onClick={() => setShowFloatingTile(false)}
+              className="text-purple-200 hover:text-white transition-colors ml-1"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        </motion.div>
+      )}
+      
+      <header className="bg-white/80 backdrop-blur-lg sticky top-0 z-20 border-b border-slate-200">
+        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between h-16">
+                <h1 className="text-2xl font-bold text-slate-800">Build Your Own Package</h1>
+                <button onClick={() => navigate('/cart')} className="relative rounded-full p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700">
+                    <ShoppingCart className="h-6 w-6" />
+                    {/* You can add a cart count indicator here if your cartStore provides it */}
+                </button>
+            </div>
         </div>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Checkout Form */}
-          <div className="lg:col-span-2">
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
-              {/* Customer Information */}
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <div className="flex items-center mb-6">
-                  <User className="h-5 w-5 text-indigo-600 mr-2" />
-                  <h2 className="text-lg font-medium text-gray-800">Customer Information</h2>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">
-                      First Name *
-                    </label>
-                    <input
-                      type="text"
-                      id="firstName"
-                      {...register('firstName', { required: 'First name is required' })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                      placeholder="Enter your first name"
-                    />
-                    {errors.firstName && (
-                      <p className="mt-1 text-sm text-red-600">{errors.firstName.message}</p>
-                    )}
-                  </div>
-                  
-                  <div>
-                    <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-1">
-                      Last Name *
-                    </label>
-                    <input
-                      type="text"
-                      id="lastName"
-                      {...register('lastName', { required: 'Last name is required' })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                      placeholder="Enter your last name"
-                    />
-                    {errors.lastName && (
-                      <p className="mt-1 text-sm text-red-600">{errors.lastName.message}</p>
-                    )}
-                  </div>
-                  
-                  <div>
-                    <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                      Email Address *
-                    </label>
-                    <input
-                      type="email"
-                      id="email"
-                      {...register('email', { 
-                        required: 'Email is required',
-                        pattern: {
-                          value: /^\S+@\S+$/i,
-                          message: 'Invalid email address'
-                        }
-                      })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                      placeholder="your.email@example.com"
-                    />
-                    {errors.email && (
-                      <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
-                    )}
-                  </div>
-                  
-                  <div>
-                    <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
-                      Phone Number *
-                    </label>
-                    <div className="flex">
-                      <div className="relative">
-                        <select
-                          {...register('countryCode')}
-                          className="appearance-none bg-gray-50 border border-gray-300 rounded-l-md px-3 py-2 pr-8 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                        >
-                          {countryCodes.map(country => (
-                            <option key={country.code} value={country.code}>
-                              {country.flag} {country.code}
-                            </option>
-                          ))}
-                        </select>
-                        <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-                      </div>
-                      <input
-                        type="tel"
-                        id="phone"
-                        {...register('phone', { 
-                          required: 'Phone number is required',
-                          validate: (value) => validatePhoneNumber(value, selectedCountryCode) || 'Please enter a valid phone number'
-                        })}
-                        className="flex-1 px-3 py-2 border border-l-0 border-gray-300 rounded-r-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                        placeholder="Enter phone number"
-                      />
-                    </div>
-                    {errors.phone && (
-                      <p className="mt-1 text-sm text-red-600">{errors.phone.message}</p>
-                    )}
-                    {phone && validatePhoneNumber(phone, selectedCountryCode) && (
-                      <p className="mt-1 text-sm text-green-600">✓ {formatPhoneNumber(phone, selectedCountryCode)}</p>
-                    )}
-                  </div>
-                  
-                  <div>
-                    <label htmlFor="alternatePhone" className="block text-sm font-medium text-gray-700 mb-1">
-                      Alternate Phone (Optional)
-                    </label>
-                    <div className="flex">
-                      <div className="relative">
-                        <select
-                          value={selectedCountryCode}
-                          onChange={(e) => setSelectedCountryCode(e.target.value)}
-                          className="appearance-none bg-gray-50 border border-gray-300 rounded-l-md px-3 py-2 pr-8 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                        >
-                          {countryCodes.map(country => (
-                            <option key={country.code} value={country.code}>
-                              {country.flag} {country.code}
-                            </option>
-                          ))}
-                        </select>
-                        <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-                      </div>
-                      <input
-                        type="tel"
-                        id="alternatePhone"
-                        {...register('alternatePhone', {
-                          validate: (value) => !value || validatePhoneNumber(value, selectedCountryCode) || 'Please enter a valid phone number'
-                        })}
-                        className="flex-1 px-3 py-2 border border-l-0 border-gray-300 rounded-r-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                        placeholder="Enter alternate phone"
-                      />
-                    </div>
-                    {errors.alternatePhone && (
-                      <p className="mt-1 text-sm text-red-600">{errors.alternatePhone.message}</p>
-                    )}
-                  </div>
-                </div>
+      </header>
+
+      <main className="max-w-screen-2xl mx-auto p-4 sm:p-6 lg:p-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+          
+          {/* --- LEFT COLUMN: CONTROLS --- */}
+          <div className="lg:col-span-2 space-y-8">
+            
+            {/* 1. Level & Subject Selection */}
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+              <h2 className="text-xl font-semibold text-slate-800 mb-1">Step 1: Select Level & Subjects</h2>
+              <p className="text-slate-500 mb-6">Choose an exam level to see the available subjects.</p>
+              
+              {/* Level Tabs */}
+              <div className="flex border-b border-slate-200 mb-6">
+                {Object.entries(levelConfig).map(([level, config]) => (
+                  <button
+                    key={level}
+                    onClick={() => handleSelectLevel(level as Level)}
+                    className={`px-4 py-2 -mb-px text-sm font-semibold border-b-2 transition-colors duration-200
+                      ${formState.level === level
+                        ? `border-${config.color}-500 text-${config.color}-600`
+                        : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'}`
+                    }
+                  >{config.name}</button>
+                ))}
               </div>
               
-              {/* Delivery Address */}
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <div className="flex items-center mb-6">
-                  <MapPin className="h-5 w-5 text-indigo-600 mr-2" />
-                  <h2 className="text-lg font-medium text-gray-800">Delivery Address</h2>
-                </div>
-                
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-1">
-                        City *
-                      </label>
-                      <input
-                        type="text"
-                        id="city"
-                        {...register('city', { required: 'City is required' })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                        placeholder="Enter your city name"
-                      />
-                      {errors.city && (
-                        <p className="mt-1 text-sm text-red-600">{errors.city.message}</p>
-                      )}
-                    </div>
-                    
-                    <div>
-                      <label htmlFor="area" className="block text-sm font-medium text-gray-700 mb-1">
-                        Area/Neighborhood
-                      </label>
-                      <input
-                        type="text"
-                        id="area"
-                        {...register('area')}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                        placeholder="Enter your area"
-                      />
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-1">
-                      Complete Address *
-                    </label>
-                    <textarea
-                      id="address"
-                      {...register('address', { required: 'Address is required' })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                      rows={3}
-                      placeholder="House/Flat number, Street name, etc."
-                    />
-                    {errors.address && (
-                      <p className="mt-1 text-sm text-red-600">{errors.address.message}</p>
-                    )}
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label htmlFor="postalCode" className="block text-sm font-medium text-gray-700 mb-1">
-                        Postal Code (Optional)
-                      </label>
-                      <input
-                        type="text"
-                        id="postalCode"
-                        {...register('postalCode')}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                        placeholder="54000"
-                      />
-                    </div>
-                    
-                    <div>
-                      <label htmlFor="landmark" className="block text-sm font-medium text-gray-700 mb-1">
-                        Nearby Landmark (Optional)
-                      </label>
-                      <input
-                        type="text"
-                        id="landmark"
-                        {...register('landmark')}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                        placeholder="Near XYZ Mall"
-                      />
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <label htmlFor="deliveryInstructions" className="block text-sm font-medium text-gray-700 mb-1">
-                      Delivery Instructions (Optional)
-                    </label>
-                    <textarea
-                      id="deliveryInstructions"
-                      {...register('deliveryInstructions')}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                      rows={2}
-                      placeholder="Special delivery instructions, gate code, etc."
-                    />
-                  </div>
-                </div>
-              </div>
-              
-              {/* Payment Method */}
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <div className="flex items-center mb-6">
-                  <CreditCard className="h-5 w-5 text-indigo-600 mr-2" />
-                  <h2 className="text-lg font-medium text-gray-800">Payment Method</h2>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {paymentMethods.map((method) => (
-                    <label key={method.id} className="cursor-pointer">
-                      <input
-                        type="radio"
-                        value={method.id}
-                        {...register('paymentType', { required: 'Please select a payment method' })}
-                        className="sr-only"
-                      />
-                      <div className={`border-2 rounded-lg p-4 transition-colors ${
-                        paymentType === method.id ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 hover:border-gray-300'
-                      }`}>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center">
-                            <span className="text-2xl mr-3">{method.icon}</span>
-                            <div>
-                              <span className="font-medium">{method.name}</span>
-                              <p className="text-sm text-gray-500">{method.description}</p>
-                            </div>
-                          </div>
-                          {paymentType === method.id && (
-                            <CheckCircle className="h-5 w-5 text-indigo-500" />
-                          )}
+              {/* Subjects Grid */}
+              <motion.div
+                key={formState.level}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+                className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
+              >
+                {subjects[formState.level].map((subject) => {
+                  const isSelected = formState.subjects.includes(subject.id);
+                  return (
+                    <button
+                      key={subject.id}
+                      onClick={() => handleToggleSubject(subject.id)}
+                      className={`p-4 rounded-xl text-left border-2 transition-all duration-200
+                        ${isSelected
+                          ? `bg-${activeColor}-50 border-${activeColor}-500 shadow-sm`
+                          : 'bg-white border-slate-200 hover:border-slate-300'}`
+                      }
+                    >
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <p className="font-semibold text-slate-800 text-sm">{subject.name}</p>
+                          <p className="text-xs text-slate-500 mt-1">Code: {subject.code}</p>
+                        </div>
+                        <div className={`w-5 h-5 mt-0.5 ml-2 flex-shrink-0 rounded-full flex items-center justify-center border-2
+                          ${isSelected ? `bg-${activeColor}-500 border-${activeColor}-500` : 'border-slate-300'}`
+                        }>
+                          {isSelected && <Check className="w-3 h-3 text-white" />}
                         </div>
                       </div>
-                    </label>
-                  ))}
-                </div>
-                
-                {errors.paymentType && (
-                  <p className="mt-2 text-sm text-red-600">{errors.paymentType.message}</p>
-                )}
-                
-                {/* Payment Details */}
-                {paymentType === 'easypaisa' && (
-                  <div className="mt-6 p-4 border border-gray-200 rounded-lg">
-                    <h3 className="font-medium text-gray-800 mb-3">EasyPaisa Payment Details</h3>
-                    <div className="bg-blue-50 p-4 rounded-lg">
-                      <h4 className="font-medium text-blue-800 mb-2">Send Payment To:</h4>
-                      <div className="text-sm text-blue-700 space-y-1">
-                        <p><strong>Account Name:</strong> AQSA NOOR MALIK</p>
-                        <p><strong>Account Number:</strong> 03297899451</p>
-                        <p><strong>Amount:</strong> PKR {total}</p>
-                      </div>
-                    </div>
-                    <div className="bg-amber-50 p-3 rounded-lg mt-3">
-                      <p className="text-sm text-amber-800">
-                        <strong>Instructions:</strong> After placing your order, send PKR {total} to the above EasyPaisa account and share the transaction ID with us via WhatsApp at +92 329 7899451.
-                      </p>
-                    </div>
-                  </div>
-                )}
-                
-                {paymentType === 'bank' && (
-                  <div className="mt-6 p-4 border border-gray-200 rounded-lg">
-                    <h3 className="font-medium text-gray-800 mb-3">Bank Transfer Details</h3>
-                    <div className="bg-blue-50 p-4 rounded-lg">
-                      <h4 className="font-medium text-blue-800 mb-2">Transfer To:</h4>
-                      <div className="text-sm text-blue-700 space-y-1">
-                        <p><strong>Account Title:</strong> ABDULLAH AZEEM MALIK (M) SHAZIA QADIR MALIK (G)</p>
-                        <p><strong>Bank:</strong> Meezan Bank - Askari X Branch</p>
-                        <p><strong>Account Number:</strong> 11460106540188</p>
-                        <p><strong>IBAN:</strong> PK75MEZN0011460106540188</p>
-                        <p><strong>Amount:</strong> PKR {total}</p>
-                      </div>
-                    </div>
-                    <div className="bg-amber-50 p-3 rounded-lg mt-3">
-                      <p className="text-sm text-amber-800">
-                        <strong>Instructions:</strong> After placing your order, transfer PKR {total} to the above bank account and share the transaction receipt with us via WhatsApp at +92 329 7899451.
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
+                    </button>
+                  );
+                })}
+              </motion.div>
+            </div>
 
-              {/* Promo Code */}
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <div className="flex items-center mb-4">
-                  <DollarSign className="h-5 w-5 text-indigo-600 mr-2" />
-                  <h2 className="text-lg font-medium text-gray-800">Promo Code</h2>
+            {/* 2. Paper & Year Configuration */}
+            <AnimatePresence>
+            {formState.subjects.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.4 }}
+                className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6"
+              >
+                <div>
+                    <h2 className="text-xl font-semibold text-slate-800 mb-1">Step 2: Configure Your Papers</h2>
+                    <p className="text-slate-500">For each subject, select the papers and year range you need.</p>
                 </div>
-                
-                <div className="flex gap-4">
-                  <input
-                    type="text"
-                    {...register('promoCode')}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                    placeholder="Enter promo code"
-                    disabled={!!appliedPromoCode}
-                  />
-                  {appliedPromoCode ? (
-                    <button
-                      type="button"
-                      className="px-6 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
-                      onClick={handleRemovePromoCode}
-                    >
-                      Remove
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
-                      onClick={handleApplyPromoCode}
-                    >
-                      Apply
-                    </button>
-                  )}
+
+                {formState.subjects.map(subjectId => {
+                  const subject = getSubjectById(subjectId);
+                  if (!subject) return null;
+                  const selectedPapers = formState.papers[subjectId] || [];
+
+                  return (
+                    <div key={subjectId} className={`p-5 rounded-xl bg-slate-50 border border-slate-200`}>
+                      <div className="flex justify-between items-center">
+                        <h3 className="font-semibold text-slate-800">{subject.name}</h3>
+                        <button onClick={() => handleToggleSubject(subjectId)} className="text-slate-400 hover:text-red-500">
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {/* Paper Toggles */}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mt-4">
+                        {subject.papers.map(paper => {
+                          const isPaperSelected = selectedPapers.some(p => p.paper === paper);
+                          return (
+                            <button
+                              key={paper}
+                              onClick={() => handleTogglePaper(subjectId, paper)}
+                              className={`px-3 py-2 text-sm rounded-md border transition-colors
+                                ${isPaperSelected ? `bg-${activeColor}-500 text-white border-${activeColor}-500` : `bg-white border-slate-300 text-slate-700 hover:bg-slate-100`}`}
+                            >
+                              {paper}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Year Selection for selected papers */}
+                      <AnimatePresence>
+                      {selectedPapers.length > 0 && (
+                        <motion.div 
+                          layout 
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="space-y-4 mt-5"
+                        >
+                          {selectedPapers.map(({ paper, sessions, yearRange }) => (
+                            <div key={paper} className="p-4 bg-white rounded-lg border border-slate-200 flex items-center justify-between flex-wrap gap-4">
+                              <div className="w-full">
+                                <p className="font-medium text-slate-700 mb-3">
+                                  Configuration for <span className={`font-semibold text-${activeColor}-600`}>{paper}</span>:
+                                </p>
+                                
+                                {/* Multi-Session Selection */}
+                                <div className="mb-3">
+                                  <p className="text-sm text-slate-600 mb-2">Sessions (select one or both):</p>
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={() => handleUpdatePaperSession(subjectId, paper, 'may-jun')}
+                                      className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                                        sessions.includes('may-jun')
+                                          ? `bg-${activeColor}-500 text-white`
+                                          : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                                      }`}
+                                    >
+                                      May/Jun
+                                    </button>
+                                    <button
+                                      onClick={() => handleUpdatePaperSession(subjectId, paper, 'oct-nov')}
+                                      className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                                        sessions.includes('oct-nov')
+                                          ? `bg-${activeColor}-500 text-white`
+                                          : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                                      }`}
+                                    >
+                                      Oct/Nov
+                                    </button>
+                                  </div>
+                                </div>
+                                
+                                {/* Year Range */}
+                                <div className="flex items-center justify-between">
+                                  <p className="text-sm text-slate-600">Year Range:</p>
+                                  <div className="flex items-center gap-4">
+                                    {/* Start Year */}
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-sm text-slate-500">Start</span>
+                                      <button onClick={() => handleUpdatePaperYear(subjectId, paper, 'start', -1)} className="p-1 rounded-full bg-slate-200 text-slate-600 hover:bg-slate-300"><Minus className="w-4 h-4" /></button>
+                                      <span className="font-mono font-semibold text-slate-800 w-10 text-center">{yearRange.start}</span>
+                                      <button onClick={() => handleUpdatePaperYear(subjectId, paper, 'start', 1)} className="p-1 rounded-full bg-slate-200 text-slate-600 hover:bg-slate-300"><Plus className="w-4 h-4" /></button>
+                                    </div>
+                                    {/* End Year */}
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-sm text-slate-500">End</span>
+                                      <button onClick={() => handleUpdatePaperYear(subjectId, paper, 'end', -1)} className="p-1 rounded-full bg-slate-200 text-slate-600 hover:bg-slate-300"><Minus className="w-4 h-4" /></button>
+                                      <span className="font-mono font-semibold text-slate-800 w-10 text-center">{yearRange.end}</span>
+                                      <button onClick={() => handleUpdatePaperYear(subjectId, paper, 'end', 1)} className="p-1 rounded-full bg-slate-200 text-slate-600 hover:bg-slate-300"><Plus className="w-4 h-4" /></button>
+                                    </div>
+                                  </div>
+                                </div>
+                                
+                                {/* Price Calculation Display */}
+                                <div className="mt-3 p-2 bg-slate-50 rounded border">
+                                  <p className="text-sm text-slate-600">
+                                    <strong>Price:</strong> {pricing[formState.level]?.[subjectId]?.[paper] || 0} PKR × {yearRange.end - yearRange.start + 1} years = <span className="font-semibold text-green-600">{(pricing[formState.level]?.[subjectId]?.[paper] || 0) * (yearRange.end - yearRange.start + 1)} PKR</span>
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </motion.div>
+                      )}
+                      </AnimatePresence>
+                    </div>
+                  );
+                })}
+              </motion.div>
+            )}
+            </AnimatePresence>
+
+            {/* 3. Binding & Notes */}
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+              <h2 className="text-xl font-semibold text-slate-800 mb-6">Step 3: Final Touches</h2>
+              
+              {/* Binding */}
+              <div className="mb-8">
+                <h3 className="font-semibold text-slate-700 mb-3">Binding Option</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <button onClick={() => setFormState({...formState, binding: 'none'})} className={`p-3 rounded-lg border-2 text-sm text-left transition ${formState.binding === 'none' ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                    <p className="font-semibold">No Binding</p>
+                    <p className="text-slate-500">Simple loose papers (Free)</p>
+                  </button>
+                  <button onClick={() => setFormState({...formState, binding: 'tape'})} className={`p-3 rounded-lg border-2 text-sm text-left transition ${formState.binding === 'tape' ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                    <p className="font-semibold">Tape Binding</p>
+                    <p className="text-slate-500">Simple and cost-effective (+PKR 50 per paper)</p>
+                  </button>
                 </div>
-                {promoMessage && (
-                  <p className={`mt-2 text-sm ${appliedPromoCode ? 'text-green-600' : 'text-red-600'}`}>
-                    {promoMessage}
-                  </p>
-                )}
               </div>
               
-              {/* Terms and Conditions */}
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <div className="flex items-start space-x-3">
-                  <input
-                    type="checkbox"
-                    id="agreeToTerms"
-                    {...register('agreeToTerms', { required: 'You must agree to terms and conditions' })}
-                    className="mt-1 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                  />
-                  <div className="flex-1">
-                    <label htmlFor="agreeToTerms" className="text-sm text-gray-700">
-                      I agree to the{' '}
-                      <Link to="/terms" className="text-indigo-600 hover:text-indigo-700 underline">
-                        Terms and Conditions
-                      </Link>{' '}
-                      and{' '}
-                      <Link to="/privacy" className="text-indigo-600 hover:text-indigo-700 underline">
-                        Privacy Policy
-                      </Link>
-                    </label>
-                    {errors.agreeToTerms && (
-                      <p className="mt-1 text-sm text-red-600">{errors.agreeToTerms.message}</p>
+              {/* Special Notes */}
+              <div>
+                <h3 className="font-semibold text-slate-700 mb-3">Special Notes (Optional)</h3>
+                <textarea
+                  value={formState.notes}
+                  onChange={(e) => setFormState({...formState, notes: e.target.value})}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  rows={3}
+                  placeholder="Any special instructions or custom requirements..."
+                />
+              </div>
+            </div>
+
+          </div>
+
+          {/* --- RIGHT COLUMN: SUMMARY --- */}
+          <div className="lg:col-span-1">
+            <div className="sticky top-24 space-y-6">
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-200">
+                <div className="p-6">
+                  <h2 className="text-xl font-semibold text-slate-800 mb-4">Your Custom Package</h2>
+                  <div className="space-y-3 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Level</span>
+                      <span className="font-medium text-slate-700 capitalize">{formState.level.replace('-', ' ')}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Binding</span>
+                      <span className="font-medium text-slate-700 capitalize">{formState.binding === 'tape' ? 'Tape Binding' : 'No Binding'}</span>
+                    </div>
+                  </div>
+                  
+                  <hr className="my-4"/>
+
+                  <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
+                    {formState.subjects.length > 0 ? formState.subjects.map(sid => {
+                      const subject = getSubjectById(sid);
+                      const papers = formState.papers[sid] || [];
+                      return (
+                        <div key={sid} className="text-sm">
+                          <p className="font-semibold text-slate-700">{subject?.name}</p>
+                          {papers.length > 0 ? (
+                            <ul className="pl-4 text-slate-500 list-disc list-inside">
+                              {papers.map(p => (
+                                <li key={p.paper}>{p.paper} ({p.sessions.join(', ')}): <span className="font-mono">{p.yearRange.start}-{p.yearRange.end}</span></li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="pl-4 text-xs text-slate-400">No papers selected</p>
+                          )}
+                        </div>
+                      );
+                    }) : (
+                        <div className="text-center py-8">
+                            <BookOpen className="mx-auto h-12 w-12 text-slate-300"/>
+                            <p className="mt-2 text-sm text-slate-500">Your selections will appear here.</p>
+                        </div>
                     )}
                   </div>
                 </div>
+
+                <div className="p-6 bg-slate-50 rounded-b-2xl border-t border-slate-200">
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="text-lg font-semibold text-slate-800">Total Price</span>
+                    <span className={`text-2xl font-bold text-slate-900`}>PKR {calculatePrice.toLocaleString()}</span>
+                  </div>
+                  <button 
+                    onClick={handleAddToCart}
+                    className={`w-full flex items-center justify-center gap-2 text-white font-semibold py-3 px-4 rounded-lg transition-all duration-200 shadow-lg shadow-${activeColor}-500/20 hover:shadow-xl hover:shadow-${activeColor}-500/30 bg-${activeColor}-500 hover:bg-${activeColor}-600 disabled:bg-slate-300 disabled:shadow-none`}
+                    disabled={formState.subjects.length === 0}
+                  >
+                    <ShoppingCart className="w-5 h-5"/>
+                    Add to Cart
+                  </button>
+                </div>
               </div>
               
-              {/* Submit Button */}
-              <button
-                type="submit"
-                disabled={isProcessing}
-                className="w-full flex items-center justify-center px-6 py-4 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed text-lg"
-              >
-                {isProcessing ? (
-                  <>
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                    <span>Processing Order...</span>
-                  </>
-                ) : (
-                  <>
-                    <Shield className="h-5 w-5 mr-2" />
-                    <span>Place Order - PKR {total.toLocaleString()}</span>
-                  </>
-                )}
-              </button>
-            </form>
-          </div>
-          
-          {/* Order Summary */}
-          <div className="lg:col-span-1">
-            <div className="bg-white rounded-lg shadow-sm overflow-hidden sticky top-24">
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h2 className="text-lg font-medium text-gray-800 flex items-center">
-                  <Package className="h-5 w-5 mr-2 text-indigo-600" />
-                  Order Summary
-                </h2>
+              <div className="p-4 bg-blue-50 text-blue-700 rounded-lg text-sm flex gap-3">
+                  <HelpCircle className="w-5 h-5 flex-shrink-0 text-blue-500 mt-0.5"/>
+                  <p>Can't find a subject? Add a custom request in the "Special Notes" and we'll do our best to accommodate.</p>
               </div>
-              
-              <div className="px-6 py-4">
-                <div className="space-y-4 mb-6">
-                  {items.map((item) => (
-                    <div key={item.id} className="flex justify-between">
-                      <div className="flex-1">
-                        <h3 className="text-sm font-medium text-gray-800">{item.name}</h3>
-                        <p className="text-sm text-gray-500">Qty: {item.quantity}</p>
-                        {item.type === 'custom' && item.details && (
-                          <p className="text-xs text-gray-400">
-                            {item.details.level} • {item.details.subjects?.length} subjects
-                          </p>
-                        )}
-                      </div>
-                      <div className="text-sm font-medium text-gray-800">
-                        PKR {(item.price * item.quantity).toLocaleString()}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                
-                <div className="space-y-2 border-t border-gray-200 pt-4">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Subtotal</span>
-                    <span className="text-gray-800">PKR {subtotal.toLocaleString()}</span>
-                  </div>
-                  
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Delivery Charges</span>
-                    <span className="text-gray-800">
-                      PKR {deliveryCharges}
-                    </span>
-                  </div>
-                  
-                  {promoDiscount > 0 && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-green-600">Promo Discount ({appliedPromoCode})</span>
-                      <span className="text-green-600">-PKR {promoDiscount}</span>
-                    </div>
-                  )}
-                  
-                  <div className="pt-2 border-t border-gray-200">
-                    <div className="flex justify-between">
-                      <span className="text-base font-medium text-gray-800">Total</span>
-                      <span className="text-xl font-bold text-indigo-600">
-                        PKR {total.toLocaleString()}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="mt-6 p-4 bg-green-50 rounded-lg">
-                  <div className="flex">
-                    <div className="flex-shrink-0">
-                      <Shield className="h-5 w-5 text-green-500" />
-                    </div>
-                    <div className="ml-3">
-                      <h3 className="text-sm font-medium text-green-800">Secure Checkout</h3>
-                      <div className="mt-2 text-sm text-green-700">
-                        <p>Your information is encrypted and secure. We offer multiple payment options for your convenience.</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                  <h3 className="text-sm font-medium text-gray-800 mb-2">Contact Us</h3>
-                  <div className="text-sm text-gray-600 space-y-1">
-                    <p className="flex items-center">
-                      <Phone className="h-4 w-4 mr-2" />
-                      +92 329 7899451
-                    </p>
-                    <p className="flex items-center">
-                      <Mail className="h-4 w-4 mr-2" />
-                      web.mtpaperhub@gmail.com
-                    </p>
-                    <p className="flex items-center">
-                      <MapPin className="h-4 w-4 mr-2" />
-                      Askari X, Lahore
-                    </p>
-                  </div>
-                </div>
-              </div>
+
             </div>
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 };
 
-export default CheckoutPage;
+export default BuildYourOwnPage;
